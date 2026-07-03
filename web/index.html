@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API网关智能管理平台</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js">
+</script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; min-height: 100vh; }
+
+/* ========== Login ========== */
+#login-overlay {
+    position: fixed; inset: 0; background: #0f172a; z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+}
+.login-card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 36px 32px; width: 380px; max-width: 90vw;
+}
+.login-card h2 { font-size: 20px; text-align: center; margin-bottom: 4px; color: #f1f5f9; }
+.login-card .subtitle { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 24px; }
+.login-card label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+.login-card input {
+    width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+    padding: 10px 12px; color: #e2e8f0; font-size: 14px; margin-bottom: 14px; outline: none;
+}
+.login-card input:focus { border-color: #3b82f6; }
+.login-card button {
+    width: 100%; background: #3b82f6; color: #fff; border: none; border-radius: 6px;
+    padding: 10px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 4px;
+}
+.login-card button:hover { background: #2563eb; }
+.login-card .error-msg { color: #ef4444; font-size: 13px; text-align: center; margin-top: 12px; display: none; }
+
+/* ========== Header ========== */
+.header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.header-row h1 { font-size: 22px; color: #f1f5f9; margin: 0; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.user-tag { font-size: 13px; color: #94a3b8; }
+.logout-btn {
+    background: transparent; border: 1px solid #475569; color: #94a3b8;
+    border-radius: 5px; padding: 4px 12px; cursor: pointer; font-size: 12px;
+}
+.logout-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+h2 { font-size: 15px; margin-bottom: 14px; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
+
+.alert-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    background: #dc2626; color: #fff; padding: 12px 24px; text-align: center;
+    font-weight: 600; font-size: 15px; display: none;
+    animation: slideDown 0.3s ease-out;
+}
+.alert-banner.show { display: block; }
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
+.ws-indicator {
+    display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; margin-left: 12px;
+}
+.ws-indicator.online { background: #166534; color: #86efac; }
+.ws-indicator.offline { background: #451a03; color: #fbbf24; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card { background: #1e293b; border-radius: 10px; padding: 18px 22px; border: 1px solid #334155; }
+.stat-card:hover { border-color: #475569; }
+.stat-label { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+.stat-value { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-value.total { color: #60a5fa; }
+.stat-value.rejected { color: #f87171; }
+.stat-value.qps { color: #4ade80; }
+.stat-value.anomaly { font-size: 28px; text-transform: uppercase; letter-spacing: 2px; }
+.stat-value.anomaly.normal { color: #4ade80; }
+.stat-value.anomaly.warning { color: #fbbf24; }
+.stat-value.anomaly.critical { color: #ef4444; animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.charts-row { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; margin-bottom: 20px; }
+.chart-box { background: #1e293b; border-radius: 10px; padding: 18px 22px; border: 1px solid #334155; }
+.chart-wrap { position: relative; height: 200px; }
+
+.tabs { display: flex; gap: 0; margin-bottom: 0; flex-wrap: wrap; }
+.tab-btn { padding: 10px 18px; background: #1e293b; border: 1px solid #334155; border-bottom: none; color: #94a3b8; cursor: pointer; font-size: 13px; border-radius: 8px 8px 0 0; margin-right: 2px; }
+.tab-btn.active { background: #283548; color: #e2e8f0; border-bottom: 2px solid #60a5fa; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.table-container { background: #1e293b; border-radius: 0 10px 10px 10px; padding: 18px 22px; border: 1px solid #334155; margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; }
+thead th { text-align: left; padding: 10px 14px; border-bottom: 2px solid #334155; color: #64748b; font-size: 12px; font-weight: 500; }
+tbody td { padding: 10px 14px; border-bottom: 1px solid #1e293b; font-size: 14px; }
+tbody tr:hover { background: #283548; }
+
+.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.badge.get { background: #1e40af; color: #93c5fd; }
+.badge.post { background: #166534; color: #86efac; }
+.badge.patch { background: #854d0e; color: #fcd34d; }
+.badge.delete { background: #991b1b; color: #fca5a5; }
+.badge.spike { background: #991b1b; color: #fca5a5; }
+.badge.drop { background: #1e40af; color: #93c5fd; }
+.badge.s200 { background: #166534; color: #86efac; }
+.badge.s429 { background: #991b1b; color: #fca5a5; }
+.badge.s403 { background: #7c2d12; color: #fed7aa; }
+.badge.allow { background: #166534; color: #86efac; }
+.badge.deny { background: #991b1b; color: #fca5a5; }
+
+.filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.filter-bar label { font-size: 13px; color: #64748b; }
+.filter-bar select, .filter-bar input { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 5px; padding: 4px 8px; font-size: 13px; outline: none; }
+
+.ip-form { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.ip-form input, .ip-form select { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 5px; padding: 6px 10px; font-size: 13px; outline: none; }
+.ip-form button { background: #3b82f6; color: #fff; border: none; border-radius: 5px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.ip-form button:hover { background: #2563eb; }
+.ip-form button.danger { background: #dc2626; }
+.ip-form button.danger:hover { background: #b91c1c; }
+
+select { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 5px; padding: 4px 8px; font-size: 13px; cursor: pointer; outline: none; }
+select:focus { border-color: #60a5fa; }
+
+.toggle { width: 38px; height: 20px; border-radius: 10px; border: none; cursor: pointer; transition: background 0.25s; position: relative; outline: none; }
+.toggle.on { background: #4ade80; }
+.toggle.off { background: #475569; }
+.toggle::after { content: ''; position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left 0.25s; }
+.toggle.on::after { left: 20px; }
+.toggle.off::after { left: 2px; }
+
+.empty-row td { text-align: center; color: #475569; padding: 32px; }
+.severity-high { color: #ef4444; font-weight: 600; }
+.severity-mid { color: #fbbf24; }
+.log-ip { color: #64748b; font-size: 12px; }
+.log-time { color: #64748b; font-size: 12px; white-space: nowrap; }
+.delete-btn { background: none; border: 1px solid #dc2626; color: #dc2626; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.delete-btn:hover { background: #dc2626; color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- ========== 登录遮罩 ========== -->
+<div id="login-overlay">
+    <div class="login-card">
+        <h2>API 网关管理平台</h2>
+        <div class="subtitle">请登录以管理限流配置</div>
+        <label for="login-username">用户名</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username">
+        <label for="login-password">密码</label>
+        <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password">
+        <button id="login-btn" onclick="doLogin()">登 录</button>
+        <div class="error-msg" id="login-error">用户名或密码错误</div>
+    </div>
+</div>
+
+<!-- ========== 告警横幅 ========== -->
+<div class="alert-banner" id="alertBanner"></div>
+
+<!-- ========== 主内容区 ========== -->
+<div id="main-content">
+
+<div class="header-row">
+    <h1>API 网关智能管理平台
+        <span class="ws-indicator offline" id="wsIndicator">轮询模式</span>
+    </h1>
+    <div class="header-right">
+        <span class="user-tag" id="currentUser"></span>
+        <button class="logout-btn" onclick="doLogout()">退出</button>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">总请求数</div>
+        <div class="stat-value total" id="totalRequests">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">被限次数</div>
+        <div class="stat-value rejected" id="rejectedRequests">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">当前 QPS</div>
+        <div class="stat-value qps" id="currentQps">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">异常状态</div>
+        <div class="stat-value anomaly normal" id="anomalyStatus">学习期</div>
+    </div>
+</div>
+
+<div class="charts-row">
+    <div class="chart-box">
+        <h2>近 60 秒 QPS 趋势</h2>
+        <div class="chart-wrap"><canvas id="qpsChart"></canvas></div>
+    </div>
+    <div class="chart-box">
+        <h2>过去 1 小时路径分布</h2>
+        <div class="chart-wrap"><canvas id="distChart"></canvas></div>
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab-btn active" data-tab="tab-anomalies">异常事件</button>
+    <button class="tab-btn" data-tab="tab-logs">调用日志</button>
+    <button class="tab-btn" data-tab="tab-ip">IP管理</button>
+    <button class="tab-btn" data-tab="tab-config">限流配置</button>
+</div>
+
+<!-- Tab: 异常事件 -->
+<div class="tab-panel active" id="tab-anomalies">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>时间</th><th>QPS</th><th>类型</th><th>偏离 (σ)</th></tr></thead>
+            <tbody id="anomalyTbody"><tr class="empty-row"><td colspan="4">暂无异常事件</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab: 调用日志 -->
+<div class="tab-panel" id="tab-logs">
+    <div class="table-container">
+        <div class="filter-bar">
+            <label>状态码</label>
+            <select id="logStatusFilter" onchange="fetchLogs()">
+                <option value="">全部</option>
+                <option value="200">200</option>
+                <option value="403">403</option>
+                <option value="429">429</option>
+            </select>
+            <label>时间范围</label>
+            <select id="logHoursFilter" onchange="fetchLogs()">
+                <option value="1">最近1小时</option>
+                <option value="6">最近6小时</option>
+                <option value="24">最近24小时</option>
+            </select>
+            <span style="color:#64748b;font-size:13px" id="logTotal">共 0 条</span>
+        </div>
+        <table>
+            <thead><tr><th>时间</th><th>路径</th><th>方法</th><th>IP</th><th>状态</th><th>算法</th></tr></thead>
+            <tbody id="logTbody"><tr class="empty-row"><td colspan="6">暂无日志</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab: IP管理 -->
+<div class="tab-panel" id="tab-ip">
+    <div class="table-container">
+        <div class="ip-form">
+            <input type="text" id="ipInput" placeholder="IP 地址，如 192.168.1.100" style="width:200px">
+            <select id="ipAction">
+                <option value="deny">封禁 (deny)</option>
+                <option value="allow">白名单 (allow)</option>
+            </select>
+            <input type="text" id="ipNote" placeholder="备注（可选）" style="width:200px">
+            <button onclick="addIpRule()">添加规则</button>
+        </div>
+        <table>
+            <thead><tr><th>ID</th><th>IP</th><th>类型</th><th>备注</th><th>添加时间</th><th>操作</th></tr></thead>
+            <tbody id="ipTbody"><tr class="empty-row"><td colspan="6">暂无IP规则</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab: 限流配置 -->
+<div class="tab-panel" id="tab-config">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>路径</th><th>方法</th><th>限额 (次)</th><th>窗口 (秒)</th><th>算法</th><th>启用</th></tr></thead>
+            <tbody id="configTbody"></tbody>
+        </table>
+    </div>
+</div>
+
+</div><!-- /main-content -->
+
+<script>
+// ==================== Auth ====================
+var authToken = localStorage.getItem('gw_token') || '';
+var currentUsername = localStorage.getItem('gw_user') || '';
+
+function getAuthHeaders() {
+    return authToken ? { 'Authorization': 'Bearer ' + authToken } : {};
+}
+
+async function adminFetch(url, options) {
+    options = options || {};
+    options.headers = Object.assign(options.headers || {}, getAuthHeaders());
+    var resp = await fetch(url, options);
+    if (resp.status === 401) {
+        doLogout();
+        throw new Error('未授权');
+    }
+    return resp;
+}
+
+function showLogin() {
+    document.getElementById('login-overlay').style.display = 'flex';
+    document.getElementById('login-error').style.display = 'none';
+}
+
+function hideLogin() {
+    document.getElementById('login-overlay').style.display = 'none';
+}
+
+async function doLogin() {
+    var username = document.getElementById('login-username').value.trim();
+    var password = document.getElementById('login-password').value.trim();
+    var errEl = document.getElementById('login-error');
+
+    if (!username || !password) {
+        errEl.textContent = '请输入用户名和密码';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        var resp = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username, password: password })
+        });
+        var data = await resp.json();
+
+        if (resp.ok) {
+            authToken = data.token;
+            currentUsername = username;
+            localStorage.setItem('gw_token', authToken);
+            localStorage.setItem('gw_user', currentUsername);
+            hideLogin();
+            document.getElementById('currentUser').textContent = '当前用户: ' + currentUsername;
+            initDashboard();
+        } else {
+            errEl.textContent = data.error || '登录失败';
+            errEl.style.display = 'block';
+        }
+    } catch(e) {
+        errEl.textContent = '网络错误，请检查服务器连接';
+        errEl.style.display = 'block';
+    }
+}
+
+function doLogout() {
+    authToken = '';
+    currentUsername = '';
+    localStorage.removeItem('gw_token');
+    localStorage.removeItem('gw_user');
+    document.getElementById('currentUser').textContent = '';
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').style.display = 'none';
+    showLogin();
+}
+
+// Enter key triggers login
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('login-overlay').style.display !== 'none') {
+        doLogin();
+    }
+});
+
+// ==================== Charts ====================
+var qpsChart, distChart;
+
+function initCharts() {
+    qpsChart = new Chart(document.getElementById('qpsChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { data: [], borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.08)', fill: true, tension: 0.3, pointRadius: 0 },
+                { label: '异常', data: [], borderColor: '#ef4444', backgroundColor: '#ef4444', pointRadius: 5, pointStyle: 'circle', showLine: false }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            scales: { x: { display: false }, y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    distChart = new Chart(document.getElementById('distChart').getContext('2d'), {
+        type: 'bar',
+        data: { labels: [], datasets: [{ data: [], backgroundColor: '#60a5fa', borderRadius: 4 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            scales: {
+                x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+// ==================== Tabs ====================
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+        this.classList.add('active');
+        document.getElementById(this.dataset.tab).classList.add('active');
+    });
+});
+
+// ==================== WebSocket ====================
+var wsConnected = false;
+var wsIndicator = document.getElementById('wsIndicator');
+var alertBanner = document.getElementById('alertBanner');
+var alertTimer = null;
+
+function connectWS() {
+    try {
+        var ws = new WebSocket('ws://localhost:8080');
+        ws.onopen = function() {
+            wsConnected = true;
+            wsIndicator.textContent = '实时推送';
+            wsIndicator.className = 'ws-indicator online';
+            console.log('[WS] 已连接');
+        };
+        ws.onmessage = function(ev) {
+            try {
+                var msg = JSON.parse(ev.data);
+                if (msg.type === 'stats') {
+                    updateStatsFromWS(msg.data);
+                } else if (msg.type === 'alert') {
+                    showAlert(msg.data);
+                }
+            } catch(e) {}
+        };
+        ws.onclose = function() {
+            wsConnected = false;
+            wsIndicator.textContent = '实时连接断开，使用轮询模式';
+            wsIndicator.className = 'ws-indicator offline';
+            console.log('[WS] 断开，5秒后重连');
+            setTimeout(connectWS, 5000);
+        };
+        ws.onerror = function() { ws.close(); };
+    } catch(e) {
+        setTimeout(connectWS, 5000);
+    }
+}
+
+function updateStatsFromWS(data) {
+    if (typeof data.totalRequests === 'number') document.getElementById('totalRequests').textContent = data.totalRequests.toLocaleString();
+    if (typeof data.rejectedRequests === 'number') document.getElementById('rejectedRequests').textContent = data.rejectedRequests.toLocaleString();
+    if (typeof data.qps === 'number') document.getElementById('currentQps').textContent = data.qps;
+    if (data.currentStatus) {
+        var el = document.getElementById('anomalyStatus');
+        el.textContent = data.currentStatus === 'critical' ? '严重' : data.currentStatus === 'warning' ? '警告' : '正常';
+        el.className = 'stat-value anomaly ' + data.currentStatus;
+    }
+}
+
+function showAlert(data) {
+    var banner = alertBanner;
+    var typeLabel = data.anomalyType === 'spike' ? '流量突增' : '流量骤降';
+    banner.textContent = '⚠ ' + typeLabel + ' | QPS: ' + data.qps + ' | 偏离: ' + data.severity + 'σ | ' + new Date(data.time).toLocaleTimeString();
+    banner.className = 'alert-banner show';
+    if (alertTimer) clearTimeout(alertTimer);
+    alertTimer = setTimeout(function() { banner.className = 'alert-banner'; }, 5000);
+}
+
+connectWS();
+
+// ==================== Stats (HTTP fallback) ====================
+var qpsHistoryData = [];
+
+async function fetchStats() {
+    if (wsConnected) return;
+    try {
+        var d = await (await fetch('/api/stats')).json();
+        document.getElementById('totalRequests').textContent = d.totalRequests.toLocaleString();
+        document.getElementById('rejectedRequests').textContent = d.rejectedRequests.toLocaleString();
+        document.getElementById('currentQps').textContent = d.qps;
+        var h = d.qpsHistory || [];
+        qpsHistoryData = h;
+        qpsChart.data.labels = h.map(function(x) { var dt = new Date(x.time); return dt.getMinutes().toString().padStart(2,'0')+':'+dt.getSeconds().toString().padStart(2,'0'); });
+        qpsChart.data.datasets[0].data = h.map(function(x) { return x.count; });
+        qpsChart.update();
+    } catch(e) { console.error('Stats:', e); }
+}
+
+// ==================== Anomalies ====================
+async function fetchAnomalies() {
+    try {
+        var d = await (await fetch('/api/anomalies')).json();
+        var el = document.getElementById('anomalyStatus');
+        el.textContent = d.currentStatus === 'critical' ? '严重' : d.currentStatus === 'warning' ? '警告' : (d.baseline.sampleSize||0) < 10 ? '学习期' : '正常';
+        el.className = 'stat-value anomaly ' + ((d.baseline.sampleSize||0) < 10 ? 'warning' : d.currentStatus);
+
+        var anomalyData = new Array(qpsChart.data.labels.length).fill(null);
+        var events = d.recentEvents || [];
+        var now = Date.now();
+        for (var i = 0; i < events.length; i++) {
+            var ev = events[i];
+            if (now - ev.time > 62000) continue;
+            var bestIdx = -1, bestDiff = Infinity;
+            for (var j = 0; j < qpsHistoryData.length; j++) {
+                var diff = Math.abs(qpsHistoryData[j].time - ev.time);
+                if (diff < bestDiff && diff < 1500) { bestDiff = diff; bestIdx = j; }
+            }
+            if (bestIdx >= 0) anomalyData[bestIdx] = ev.qps;
+        }
+        qpsChart.data.datasets[1].data = anomalyData;
+        qpsChart.update();
+
+        var tbody = document.getElementById('anomalyTbody');
+        if (!events.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="4">暂无异常事件</td></tr>'; }
+        else {
+            tbody.innerHTML = events.slice(0, 20).map(function(ev) {
+                var dt = new Date(ev.time);
+                var ts = dt.getHours().toString().padStart(2,'0')+':'+dt.getMinutes().toString().padStart(2,'0')+':'+dt.getSeconds().toString().padStart(2,'0');
+                return '<tr><td>'+ts+'</td><td>'+ev.qps+'</td><td><span class="badge '+ev.type+'">'+(ev.type==='spike'?'突增':'骤降')+'</span></td><td class="'+(ev.severity>=3?'severity-high':'severity-mid')+'">'+ev.severity+'σ</td></tr>';
+            }).join('');
+        }
+    } catch(e) { console.error('Anomalies:', e); }
+}
+
+// ==================== Logs ====================
+async function fetchLogs() {
+    try {
+        var hours = document.getElementById('logHoursFilter').value;
+        var status = document.getElementById('logStatusFilter').value;
+        var url = '/api/logs?limit=100&hours=' + hours + (status ? '&status=' + status : '');
+        var d = await (await fetch(url)).json();
+        document.getElementById('logTotal').textContent = '共 ' + d.total + ' 条';
+        var dist = d.distribution || [];
+        distChart.data.labels = dist.map(function(x) { return x.route_method + ' ' + x.route_path; });
+        distChart.data.datasets[0].data = dist.map(function(x) { return x.count; });
+        distChart.update();
+
+        var tbody = document.getElementById('logTbody');
+        var rows = d.rows || [];
+        if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">暂无日志</td></tr>'; return; }
+        tbody.innerHTML = rows.map(function(r) {
+            var dt = new Date(r.created_at + 'Z');
+            var ts = dt.getHours().toString().padStart(2,'0')+':'+dt.getMinutes().toString().padStart(2,'0')+':'+dt.getSeconds().toString().padStart(2,'0');
+            return '<tr>' +
+                '<td class="log-time">'+ts+'</td>' +
+                '<td><code style="font-size:13px">'+esc(r.route_path)+'</code></td>' +
+                '<td><span class="badge '+r.route_method.toLowerCase()+'">'+esc(r.route_method)+'</span></td>' +
+                '<td class="log-ip">'+esc(r.ip)+'</td>' +
+                '<td><span class="badge s'+r.status_code+'">'+r.status_code+'</span></td>' +
+                '<td style="font-size:13px;color:#94a3b8">'+(r.algorithm||'-')+'</td>' +
+                '</tr>';
+        }).join('');
+    } catch(e) { console.error('Logs:', e); }
+}
+
+// ==================== IP Rules ====================
+async function fetchIpRules() {
+    try {
+        var rules = await (await adminFetch('/api/admin/ip-rules')).json();
+        var tbody = document.getElementById('ipTbody');
+        if (!rules.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">暂无IP规则</td></tr>'; return; }
+        tbody.innerHTML = rules.map(function(r) {
+            var dt = new Date(r.created_at + 'Z');
+            return '<tr>' +
+                '<td>'+r.id+'</td>' +
+                '<td><code>'+esc(r.ip)+'</code></td>' +
+                '<td><span class="badge '+r.action+'">'+(r.action==='deny'?'封禁':'白名单')+'</span></td>' +
+                '<td>'+esc(r.note||'')+'</td>' +
+                '<td class="log-time">'+dt.toLocaleString()+'</td>' +
+                '<td><button class="delete-btn" onclick="deleteIpRule('+r.id+')">删除</button></td>' +
+                '</tr>';
+        }).join('');
+    } catch(e) { console.error('IP rules:', e); }
+}
+
+async function addIpRule() {
+    var ip = document.getElementById('ipInput').value.trim();
+    var action = document.getElementById('ipAction').value;
+    var note = document.getElementById('ipNote').value.trim();
+    if (!ip) return;
+    try {
+        await adminFetch('/api/admin/ip-rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip: ip, action: action, note: note })
+        });
+        document.getElementById('ipInput').value = '';
+        document.getElementById('ipNote').value = '';
+        fetchIpRules();
+    } catch(e) { console.error('Add IP rule:', e); }
+}
+
+async function deleteIpRule(id) {
+    try {
+        await adminFetch('/api/admin/ip-rules/' + id, { method: 'DELETE' });
+        fetchIpRules();
+    } catch(e) { console.error('Delete IP rule:', e); }
+}
+
+// ==================== Config ====================
+async function fetchConfigs() {
+    try {
+        var configs = await (await adminFetch('/api/admin/rate-limits')).json();
+        var tbody = document.getElementById('configTbody');
+        if (!configs.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">暂无配置数据</td></tr>'; return; }
+        tbody.innerHTML = configs.map(function(c) {
+            var algo = c.algorithm || 'sliding-window';
+            return '<tr>' +
+                '<td><code style="font-size:13px">'+esc(c.route_path)+'</code></td>' +
+                '<td><span class="badge '+c.route_method.toLowerCase()+'">'+esc(c.route_method)+'</span></td>' +
+                '<td>'+c.max_requests+'</td><td>'+(c.window_ms/1000)+'s</td>' +
+                '<td><select data-path="'+escAttr(c.route_path)+'" data-method="'+escAttr(c.route_method)+'" class="algo-select">' +
+                    '<option value="fixed-window"'+(algo==='fixed-window'?' selected':'')+'>固定窗口</option>' +
+                    '<option value="sliding-window"'+(algo==='sliding-window'?' selected':'')+'>滑动窗口</option>' +
+                    '<option value="token-bucket"'+(algo==='token-bucket'?' selected':'')+'>令牌桶</option>' +
+                '</select></td>' +
+                '<td><button class="toggle '+(c.enabled?'on':'off')+'" data-path="'+escAttr(c.route_path)+'" data-method="'+escAttr(c.route_method)+'" data-enabled="'+(c.enabled?'1':'0')+'"></button></td>' +
+                '</tr>';
+        }).join('');
+        tbody.querySelectorAll('.algo-select').forEach(function(s) { s.addEventListener('change', function() { updateAlgo(this.dataset.path, this.dataset.method, this.value); }); });
+        tbody.querySelectorAll('.toggle').forEach(function(b) { b.addEventListener('click', function() { toggleCfg(this.dataset.path, this.dataset.method, this.dataset.enabled==='0'); }); });
+    } catch(e) { console.error('Config:', e); }
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function updateAlgo(p, m, a) {
+    await adminFetch('/api/admin/rate-limits/toggle', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:p,method:m,algorithm:a}) });
+    fetchConfigs();
+}
+async function toggleCfg(p, m, e) {
+    await adminFetch('/api/admin/rate-limits/toggle', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:p,method:m,enabled:e}) });
+    fetchConfigs();
+}
+
+// ==================== Init ====================
+function initDashboard() {
+    initCharts();
+    fetchStats();
+    fetchAnomalies();
+    fetchLogs();
+    fetchIpRules();
+    fetchConfigs();
+    setInterval(fetchStats, 2000);
+    setInterval(fetchAnomalies, 5000);
+    setInterval(fetchLogs, 5000);
+    setInterval(fetchIpRules, 10000);
+    setInterval(fetchConfigs, 5000);
+}
+
+// ==================== Bootstrap ====================
+if (authToken) {
+    hideLogin();
+    document.getElementById('currentUser').textContent = '当前用户: ' + currentUsername;
+    initDashboard();
+} else {
+    showLogin();
+}
+</script>
+</body>
+</html>

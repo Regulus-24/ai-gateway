@@ -1,0 +1,11 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - JWT_SECRET=production-secret-key
+      - DB_PATH=/app/data/gateway.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

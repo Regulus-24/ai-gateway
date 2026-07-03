@@ -1,0 +1,9 @@
+node_modules
+gateway.db
+.git
+tests
+docs
+data
+*.md
+!README.md
+.env
